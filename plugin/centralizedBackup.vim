@@ -1,8 +1,8 @@
 "-------------------------------------------------------------------------------
 "  Description: Use VMS style centralized versioned backup
-"    Copyright: Copyright (C) 2010-2016 Jeff Lanzarotta
+"    Copyright: Copyright (C) 2010-2024 Jeff Lanzarotta
 "   Maintainer: Jeff Lanzarotta
-"      Version: 1.1
+"      Version: 1.2
 "        Usage: copy to plugin directory.
 "-------------------------------------------------------------------------------
 " Customize:
@@ -22,6 +22,8 @@ if exists("s:loaded_centralized_backup") || version < 700
 else
     let s:loaded_centralized_backup = 22
 
+    " Check and see of the global value is set.  If not, default to 10
+    " backups.
     if ! exists("g:backup_purge")
         let g:backup_purge = 10
     endif
@@ -33,16 +35,16 @@ else
         set nobackup
         set backupext=-Backup
 
-        function s:Do_Purge(Doc_Path)
+        function s:do_purge(doc_path)
             if g:backup_purge > 0
-                execute ":silent :!PURGE /NoLog /Keep=" . g:backup_purge . " " . a:Doc_Path
+                execute ":silent :!PURGE /NoLog /Keep=" . g:backup_purge . " " . a:doc_path
             endif
-        endfunction Do_Purge
+        endfunction do_purge
 
-        autocmd BufWritePre * :call s:Do_Purge(expand('<afile>:p'))
+        autocmd BufWritePre * :call s:do_purge(fnameescape(expand('<afile>:p')))
     else
         " Non VMS type systems.
-        if ! exists("g:backup_directory")
+        if !exists("g:backup_directory")
             if has('unix') || has('macunix')
                 let g:backup_directory = $HOME . '/.backups'
             else
@@ -60,9 +62,9 @@ else
         set backup
         set backupext=;1
 
-        function s:MakeBackupDirectory(Path)
-            if strlen (finddir (a:Path)) == 0
-                call mkdir (a:Path, "p", 0775)
+        function s:make_backup_directory(path)
+            if strlen (finddir(a:path)) == 0
+                call mkdir(a:path, "p", 0775)
 
                 if has ("os2")          ||
                     \ has ("win16")     ||
@@ -70,64 +72,63 @@ else
                     \ has ("win64")     ||
                     \ has ("dos16")     ||
                     \ has ("dos32")
-                    execute '!attrib "' . a:Path . '"'
+                    execute '!attrib "' . a:path . '"'
               endif
             endif
         endfunction
 
-        function s:GetBackupFileVersion(Filename)
+        function s:get_backup_file_version(filename)
             return eval (
             \ strpart (
-                \ a:Filename,
-                \ strridx (a:Filename, ";") + 1))
+                \ a:filename,
+                \ strridx (a:filename, ";") + 1))
         endfunction
 
-        function s:Version_Compare(Left, Right)
-            let l:Left_Ver = s:GetBackupFileVersion(a:Left)
-            let l:Right_Ver = s:GetBackupFileVersion(a:Right)
-            return l:Left_Ver == l:Right_Ver
+        function s:version_compare(left, right)
+            let l:left_version = s:get_backup_file_version(a:left)
+            let l:right_version = s:get_backup_file_version(a:right)
+            return l:left_version == l:right_version
                 \ ? 0
-                \ : l:Left_Ver > l:Right_Ver
+                \ : l:left_version > l:right_version
                 \ ? 1
                 \ : -1
         endfunction
 
-        function s:DoBackup(Backup_Root, Doc_Path, Doc_Name)
-            let New_Doc_Path = substitute(a:Doc_Path, ":", "", "ge")
-
-            let l:Backup_Path = a:Backup_Root . '/' . New_Doc_Path
+        function s:do_backup(backup_root, doc_path, doc_name)
+            let new_doc_path = substitute(a:doc_path, ":", "", "ge")
+            let l:backup_path = a:backup_root . '/' . new_doc_path
 
             " Remove trailing / or \.
-            if (l:Backup_Path[strlen(l:Backup_Path)-1] == '/') || (l:Backup_Path[strlen(l:Backup_Path)-1] == '\')
-                let l:Backup_Path=strpart(l:Backup_Path, 0, strlen(l:Backup_Path)-1)
+            if (l:backup_path[strlen(l:backup_path)-1] == '/') || (l:backup_path[strlen(l:backup_path)-1] == '\')
+                let l:backup_path=strpart(l:backup_path, 0, strlen(l:backup_path)-1)
             endif
 
-            call s:MakeBackupDirectory(l:Backup_Path)
+            call s:make_backup_directory(l:backup_path)
 
-            execute "set backupdir^=" . l:Backup_Path
+            execute "set backupdir^=" . fnameescape(l:backup_path)
 
-            let l:Existing_Backups = sort (
+            let l:existing_backups = sort (
                 \ split (
-                \ glob (l:Backup_Path . '/' . a:Doc_Name . ';*'), "\n"),
-                \ "s:Version_Compare")
+                \ glob (l:backup_path . '/' . a:doc_name . ';*'), "\n"),
+                \ "s:version_compare")
 
-            if empty (l:Existing_Backups)
+            if empty (l:existing_backups)
                 set backupext=;1
             else
-                let &backupext=';' . string (s:GetBackupFileVersion(l:Existing_Backups[-1]) + 1)
+                let &backupext=';' . string (s:get_backup_file_version(l:existing_backups[-1]) + 1)
 
-                if g:backup_purge > 0 && len (l:Existing_Backups) > g:backup_purge
-                    for l:Item in l:Existing_Backups[0 :  len (l:Existing_Backups) - g:backup_purge]
+                if g:backup_purge > 0 && len (l:existing_backups) > g:backup_purge
+                    for l:Item in l:existing_backups[0 :  len (l:existing_backups) - g:backup_purge]
                         call delete (l:Item)
                     endfor
                 endif
             endif
-        endfunction Do_Backup
+        endfunction do_backup
 
-        autocmd BufWritePre * :call s:DoBackup (
+        autocmd BufWritePre * :call s:do_backup (
             \ g:backup_directory,
-            \ expand ('<afile>:p:h'),
-            \ expand ('<afile>:p:t'))
+            \ expand('<afile>:p:h'),
+            \ expand('<afile>:p:t'))
     endif
 
     finish
